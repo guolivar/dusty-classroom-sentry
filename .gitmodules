@@ -10,3 +10,6 @@
 [submodule "lib/Adafruit_GFX"]
 	path = lib/Adafruit_GFX
 	url = git@github.com:adafruit/Adafruit-GFX-Library.git
+[submodule "lib/Phant"]
+	path = lib/Phant
+	url = git@github.com:sparkfun/phant-arduino.git
