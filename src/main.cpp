@@ -3,6 +3,13 @@ WEMOS-D1-pro based ODIN-SD outdoor dust sensor
 Software Serial communication with PMS3003
 Clock checked via NTP
 Data upload to Thingspeak server
+
+Libraries:
+Adafruit_GFX
+Adafruit_SSD1306
+ThingSpeak
+WEMOS_SHT3X
+
  */
 
  #include <Arduino.h>
