@@ -7,3 +7,6 @@
 [submodule "lib/WEMOS_SHT3X"]
 	path = lib/WEMOS_SHT3X
 	url = git@github.com:wemos/WEMOS_SHT3x_Arduino_Library.git
+[submodule "lib/Adafruit_GFX"]
+	path = lib/Adafruit_GFX
+	url = git@github.com:adafruit/Adafruit-GFX-Library.git
