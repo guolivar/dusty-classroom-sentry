@@ -43,17 +43,17 @@ byte receiveDat[receiveDatIndex]; //receive data from the air detector module
 byte readbuffer[128]; //full serial port read buffer for clearing
 unsigned int checkSum,checkresult;
 unsigned int FrameLength,Data4,Data5,Data6;
-unsigned int PM1,PM25,PM10,PM1us,PM25us,PM10us,Data4,Data5,Data6;
+unsigned int PM1,PM25,PM10,PM1us,PM25us,PM10us;
 int length,httpPort; //HTTP message variables
 bool valid_data,iamok; // Instrument status
 File myFile; //Output file
 File configFile; // To read the configuration from sd card
-String curr_time; //Date-Time objets
+String curr_time; //Date-Time container
 char eol='\n';
 String sdCard,fname;
 String ssid,passwd,srv_addr,private_key,public_key,port;
 String serialn,t_res;
-unsigned int interval;
+unsigned int interval,tic,toc;
 char file_fname[50],c_ssid[50],c_passwd[50],c_serialn[50];
 char c_srv_addr[50],c_private_key[50],c_public_key[50];
 // To get the MAC address for the wireless link
@@ -64,68 +64,8 @@ SHT3X sht30(0x45);
 //OLED display
 Adafruit_SSD1306 display(OLED_RESET);
 //ThingSpeak
-unsigned long myChannelNumber = 31461;
-const char * myWriteAPIKey = "LD79EOAAWRVYF04Y";
-
-
-
-void setup() {
-  iamok = true;
-  Serial.begin(9600);
-  Serial.setTimeout(20000);
-  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
-
-}
-
-void loop() {
-
-
-
-
-
-  // Clear the buffer.
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setCursor(0, 0);
-  display.setTextColor(WHITE);
-
-  if(sht30.get()==0){
-    display.println("T: ");
-    display.setTextSize(2);
-    display.println(sht30.cTemp);
-
-    display.setTextSize(1);
-    display.println("H: ");
-    display.setTextSize(2);
-    display.println(sht30.humidity);
-  }
-  else
-  {
-    display.println("Error!");
-  }
-  display.display();
-  delay(1000);
-
-
-
-
-
-
-}
-
-void readDust(){
-	while (Serial.peek()!=66){
-		receiveDat[0]=Serial.read();
-		yield();
-	}
-	Serial.readBytes((char *)receiveDat,receiveDatIndex);
-	checkSum = 0;
-	for (int i = 0;i < receiveDatIndex;i++){
-		checkSum = checkSum + receiveDat[i];
-	}
-	checkresult = receiveDat[receiveDatIndex-2]*256+receiveDat[receiveDatIndex-1]+receiveDat[receiveDatIndex-2]+receiveDat[receiveDatIndex-1];
-	valid_data = (checkSum == checkresult);
-}
+unsigned long myChannelNumber;
+char myWriteAPIKey[16];
 
 String getTime() {
   WiFiClient client;
@@ -162,14 +102,180 @@ String getTime() {
 void initWifi() {
    Serial.print("Connecting to ");
    Serial.print(ssid);
-   if (strcmp (WiFi.SSID(),ssid) != 0) {
-      WiFi.begin(ssid, password);
-   }
-
-   while (WiFi.status() != WL_CONNECTED) {
+   WiFi.begin(c_ssid, c_passwd);
+   // Try a few times and then timeout
+   int tout = 0;
+   while ((WiFi.status() != WL_CONNECTED)&&(tout<50)) {
       delay(500);
       Serial.print(".");
+      tout = tout +1;
+   }
+   if (WiFi.status() != WL_CONNECTED){
+     Serial.println("WiFi not connected ... timed out");
    }
   Serial.print("\nWiFi connected, IP address: ");
   Serial.println(WiFi.localIP());
+}
+
+void readDust(){
+	while (Serial.peek()!=66){
+		receiveDat[0]=Serial.read();
+		yield();
+	}
+	Serial.readBytes((char *)receiveDat,receiveDatIndex);
+	checkSum = 0;
+	for (int i = 0;i < receiveDatIndex;i++){
+		checkSum = checkSum + receiveDat[i];
+	}
+	checkresult = receiveDat[receiveDatIndex-2]*256+receiveDat[receiveDatIndex-1]+receiveDat[receiveDatIndex-2]+receiveDat[receiveDatIndex-1];
+	valid_data = (checkSum == checkresult);
+}
+void setup() {
+  iamok = true;
+  Serial.begin(9600);
+  Serial.setTimeout(20000);
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  //Read configuration file
+
+  //Initialize the SD card and read configuration
+	Serial.println(F("Initializing SD Card ..."));
+	if (!SD.begin(chipSelect)){
+		Serial.println(F("initialization failed!"));
+		iamok = false;
+		return;
+	}
+	Serial.println(F("Initialization done."));
+	//Read configuration options
+	//wifi SSID
+	//wifi PWD
+	//serialnumber
+	//time resolution (seconds)
+	// Thingspe channel
+	// Read-Write ThingSpeak API Key
+	configFile = SD.open("config.txt",FILE_READ);
+	//Read SSID
+	ssid = "";
+	while (configFile.peek()!='\n'){
+		ssid = ssid + String((char)configFile.read());
+	}
+  Serial.println(ssid);
+	ssid.toCharArray(c_ssid,ssid.length()+1);
+	eol=configFile.read();
+	//Read password
+	passwd = "";
+	while (configFile.peek()!='\n'){
+		passwd = passwd + String((char)configFile.read());
+	}
+  Serial.println(passwd);
+	passwd.toCharArray(c_passwd,passwd.length()+1);
+	eol=configFile.read();
+	//Read Serial Number
+	serialn = "";
+	while (configFile.peek()!='\n'){
+		serialn = serialn + String((char)configFile.read());
+	}
+  Serial.println(serialn);
+	serialn.toCharArray(c_serialn,serialn.length()+1);
+	eol=configFile.read();
+	//Read time resolution
+	t_res = "";
+	while (configFile.peek()!='\n'){
+		t_res = t_res + String((char)configFile.read());
+	}
+  Serial.println(t_res);
+	interval = t_res.toInt();
+	eol=configFile.read();
+	//Read thingspeak channel
+	srv_addr = "";
+	while (configFile.peek()!='\n'){
+		srv_addr = srv_addr + String((char)configFile.read());
+	}
+  Serial.println(srv_addr);
+	myChannelNumber = srv_addr.toInt();
+
+	eol=configFile.read();
+	//Read write API Key
+	port = "";
+	while (configFile.peek()!='\n'){
+		port = port + String((char)configFile.read());
+	}
+  Serial.println(port);
+	port.toCharArray(myWriteAPIKey,port.length()+1);
+	eol=configFile.read();
+
+	configFile.close();
+
+  //Create folder for this serial number
+  bool mkd = SD.mkdir(c_serialn);
+  sdCard = serialn;
+
+	// Echo the config file
+	Serial.println(c_ssid);
+	Serial.println(c_passwd);
+	Serial.println(serialn);
+	Serial.println(interval);
+	Serial.println(c_srv_addr);
+	Serial.println(c_public_key);
+	Serial.println(c_private_key);
+
+  //Start Wifi and ThingSpeak
+  initWifi();
+  WiFiClient client;
+  curr_time = getTime();
+  ThingSpeak.begin(client);
+}
+
+void loop() {
+  tic = millis();
+  //Read data
+	//Clear the serial receive buffer
+	Serial.readBytes((char *)readbuffer,128);
+  Serial.println("I'm about to read the dust sensor");
+	int nrecs = 0;
+	while ((!valid_data)){
+		readDust();
+		delay(5);
+		nrecs = nrecs+1;
+	}
+  sht30.get();
+  Serial.println("I got data");
+	// Get time
+  curr_time = getTime();
+  // Parse the PMS3003 message
+	FrameLength = (receiveDat[2]*256)+receiveDat[3];
+	PM1 = (receiveDat[4]*256)+receiveDat[5];
+	PM25 = (receiveDat[6]*256)+receiveDat[7];
+	PM10 = (receiveDat[8]*256)+receiveDat[9];
+	Data4 = (receiveDat[10]*256)+receiveDat[11];
+	Data5 = (receiveDat[12]*256)+receiveDat[13];
+	Data6 = (receiveDat[14]*256)+receiveDat[15];
+	PM1us = (receiveDat[16]*256)+receiveDat[17];
+	PM25us = (receiveDat[18]*256)+receiveDat[19];
+	PM10us = (receiveDat[20]*256)+receiveDat[21];
+	Serial.print(curr_time);
+	Serial.print(F(" PM2.5 = "));
+	Serial.println(PM25);
+	fname =String(serialn + "/" + sdCard + ".txt");
+	fname.toCharArray(file_fname,fname.length()+1);
+	float temperature = sht30.cTemp;
+	float rh = sht30.humidity;
+  // Push data to ThingSpeak
+  /*
+  Serial.println("Now to update fields");
+  Serial.println(ThingSpeak.setField(1,PM1));
+  Serial.println(ThingSpeak.setField(2,PM25));
+  Serial.println(ThingSpeak.setField(3,PM10));
+  Serial.println(ThingSpeak.setField(4,temperature));
+  Serial.println(ThingSpeak.setField(5,rh));
+  // Write the fields that you've set all at once.
+  Serial.println("Now to upload");
+  Serial.println(ThingSpeak.writeFields(myChannelNumber, myWriteAPIKey));
+
+  // convert to microseconds
+  toc = millis();
+  unsigned long nap_time = (interval*1000) - (toc - tic);
+  Serial.print("Go to sleep for ");
+  Serial.println(nap_time);
+  delay(nap_time);
+  */
 }
