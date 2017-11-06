@@ -33,7 +33,10 @@ WEMOS_SHT3X
 //Phant library
 #include <Phant.h>
 
-
+// Software Serial
+#include "SoftwareSerial.h"
+#define PMSTX D4
+#define PMSRX D3
 
 //Constants and definitions
 #define chipSelect D8 // Where is the SD card chipSelect pin
@@ -44,7 +47,8 @@ byte readbuffer[128]; //full serial port read buffer for clearing
 unsigned int checkSum,checkresult;
 unsigned int FrameLength,Data4,Data5,Data6;
 unsigned int PM1,PM25,PM10,PM1us,PM25us,PM10us;
-int length,httpPort; //HTTP message variables
+SoftwareSerial pms_port(PMSRX, PMSTX, false, 128);
+
 bool valid_data,iamok; // Instrument status
 File myFile; //Output file
 File configFile; // To read the configuration from sd card
@@ -118,11 +122,11 @@ void initWifi() {
 }
 
 void readDust(){
-	while (Serial.peek()!=66){
-		receiveDat[0]=Serial.read();
+	while (pms_port.peek()!=66){
+		receiveDat[0]=pms_port.read();
 		yield();
 	}
-	Serial.readBytes((char *)receiveDat,receiveDatIndex);
+	pms_port.readBytes((char *)receiveDat,receiveDatIndex);
 	checkSum = 0;
 	for (int i = 0;i < receiveDatIndex;i++){
 		checkSum = checkSum + receiveDat[i];
@@ -132,10 +136,10 @@ void readDust(){
 }
 void setup() {
   iamok = true;
-  Serial.begin(9600);
+  Serial.begin(115200);
+  pms_port.begin(9600);
+  pms_port.setTimeout(20000);
   Serial.println("I'm starting");
-  Serial.setTimeout(20000);
-  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
   //Read configuration file
 
   //Initialize the SD card and read configuration
@@ -151,8 +155,9 @@ void setup() {
 	//wifi PWD
 	//serialnumber
 	//time resolution (seconds)
-	// Thingspe channel
-	// Read-Write ThingSpeak API Key
+	// Phant address
+  // Phant Public Key
+	// Phant Private Key
 	configFile = SD.open("config.txt",FILE_READ);
 	//Read SSID
 	ssid = "";
@@ -186,23 +191,28 @@ void setup() {
   Serial.println(t_res);
 	interval = t_res.toInt();
 	eol=configFile.read();
-	//Read thingspeak channel
+	//Read Phant server address
 	srv_addr = "";
 	while (configFile.peek()!='\n'){
 		srv_addr = srv_addr + String((char)configFile.read());
 	}
   Serial.println(srv_addr);
-	myChannelNumber = srv_addr.toInt();
+	srv_addr.toCharArray(c_srv_addr, srv_addr.length()+1);
 
 	eol=configFile.read();
-	//Read write API Key
-	port = "";
+  //Read public_key
+	public_key = "";
 	while (configFile.peek()!='\n'){
-		port = port + String((char)configFile.read());
+		public_key = public_key + String((char)configFile.read());
 	}
-  Serial.println(port);
-	port.toCharArray(myWriteAPIKey,port.length()+1);
+	public_key.toCharArray(c_public_key,public_key.length()+1);
 	eol=configFile.read();
+	//Read time private_key
+	private_key = "";
+	while (configFile.peek()!='\n'){
+		private_key = private_key + String((char)configFile.read());
+	}
+	private_key.toCharArray(c_private_key,private_key.length()+1);
 
 	configFile.close();
 
@@ -276,18 +286,27 @@ void loop() {
   myFile.print("\t");
   myFile.println(rh);
   myFile.close();
-  /*
+
+  //Create Phant object
+  Phant phant(srv_addr, public_key, private_key);
   // Add measurements to phant object
   Serial.println("Now to update fields");
-  phant.add("val1", PM1);
-  phant.add("val2", PM25);
-  phant.add("val3", PM10);
-  pnaht.add("val4",temperature);
-  phant.add("val5",rh);
+
+  phant.add("pm1", PM1);
+  phant.add("pm25", PM25);
+  phant.add("pm10", PM10);
+  phant.add("temperature",temperature);
+  phant.add("rh",rh);
   // Write the fields that you've set all at once.
   Serial.println("Now to upload");
-  Serial.println(phant.post());
-*/
+  WiFiClient client;
+  if (client.connect(c_srv_addr,8080)){
+    client.print(phant.post());
+    client.stop();
+  }
+  else {
+    Serial.println("Can't connect to Phant server!");
+  }
   // convert to microseconds
   toc = millis();
   unsigned long nap_time = (interval*1000) - (toc - tic);
