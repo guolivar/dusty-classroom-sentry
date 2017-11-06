@@ -7,18 +7,15 @@ Data upload to Thingspeak server
 Libraries:
 Adafruit_GFX
 Adafruit_SSD1306
-ThingSpeak
+Phant
 WEMOS_SHT3X
 
  */
 
- #include <Arduino.h>
+#include <Arduino.h>
 //Wireless and web-server libraries
 #include "ESP8266WiFi.h"
 #include <WiFiClient.h>
-
-//Thingspeak library
-#include "ThingSpeak.h"
 
 // SD card libraries
 #include "SPI.h"
@@ -32,6 +29,9 @@ WEMOS_SHT3X
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #define OLED_RESET 0  // GPIO0
+
+//Phant library
+#include <Phant.h>
 
 
 
@@ -133,6 +133,7 @@ void readDust(){
 void setup() {
   iamok = true;
   Serial.begin(9600);
+  Serial.println("I'm starting");
   Serial.setTimeout(20000);
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
   //Read configuration file
@@ -142,7 +143,7 @@ void setup() {
 	if (!SD.begin(chipSelect)){
 		Serial.println(F("initialization failed!"));
 		iamok = false;
-		return;
+		//return;
 	}
 	Serial.println(F("Initialization done."));
 	//Read configuration options
@@ -222,7 +223,7 @@ void setup() {
   initWifi();
   WiFiClient client;
   curr_time = getTime();
-  ThingSpeak.begin(client);
+  //Phant phant(srv_addr, public_key, private_key);
 }
 
 void loop() {
@@ -259,23 +260,38 @@ void loop() {
 	fname.toCharArray(file_fname,fname.length()+1);
 	float temperature = sht30.cTemp;
 	float rh = sht30.humidity;
-  // Push data to ThingSpeak
+  Serial.print("Temperature = ");
+  Serial.println(temperature);
+  //Write to SD card
+  myFile = SD.open(file_fname, FILE_WRITE);
+  myFile.print(curr_time);
+  myFile.print("\t");
+  myFile.print(PM1);
+  myFile.print("\t");
+  myFile.print(PM25);
+  myFile.print("\t");
+  myFile.print(PM10);
+  myFile.print("\t");
+  myFile.print(temperature);
+  myFile.print("\t");
+  myFile.println(rh);
+  myFile.close();
   /*
+  // Add measurements to phant object
   Serial.println("Now to update fields");
-  Serial.println(ThingSpeak.setField(1,PM1));
-  Serial.println(ThingSpeak.setField(2,PM25));
-  Serial.println(ThingSpeak.setField(3,PM10));
-  Serial.println(ThingSpeak.setField(4,temperature));
-  Serial.println(ThingSpeak.setField(5,rh));
+  phant.add("val1", PM1);
+  phant.add("val2", PM25);
+  phant.add("val3", PM10);
+  pnaht.add("val4",temperature);
+  phant.add("val5",rh);
   // Write the fields that you've set all at once.
   Serial.println("Now to upload");
-  Serial.println(ThingSpeak.writeFields(myChannelNumber, myWriteAPIKey));
-
+  Serial.println(phant.post());
+*/
   // convert to microseconds
   toc = millis();
   unsigned long nap_time = (interval*1000) - (toc - tic);
   Serial.print("Go to sleep for ");
   Serial.println(nap_time);
   delay(nap_time);
-  */
 }
