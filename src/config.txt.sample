@@ -1,0 +1,14 @@
+wifinetwork
+wifipassword
+sensor1
+60
+phant.server.address
+123efvsae49823efhvsbp8otrihe
+12FG047GCj0203eig0JIRVeoir3d
+[wifi SSID]
+[wifi PWD]
+[serialnumber (max 8 characters)]
+[time resolution (seconds)]
+[Phant address]
+[Phant Public Key]
+[Phant Private Key]

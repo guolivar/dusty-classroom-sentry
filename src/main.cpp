@@ -71,29 +71,34 @@ Adafruit_SSD1306 display(OLED_RESET);
 unsigned long myChannelNumber;
 char myWriteAPIKey[16];
 
-String getTime() {
+String getTime(char * timesrv) {
   WiFiClient client;
-  while (!!!client.connect("google.com", 80)) {
-    Serial.println("connection failed, retrying...");
-  }
+  int tout = 0;
+  if (!!!client.connect(timesrv, 80)) {
+    yield();
+    Serial.println("connection failed, no time");
+    String theDate = "no valid time";
+    return theDate;
+  } else {
+    client.print("HEAD / HTTP/1.1\r\n\r\n");
 
-  client.print("HEAD / HTTP/1.1\r\n\r\n");
+    while(!!!client.available()) {
+      yield();
+    }
 
-  while(!!!client.available()) {
-     yield();
-  }
-
-  while(client.available()){
-    if (client.read() == '\n') {
-      if (client.read() == 'D') {
-        if (client.read() == 'a') {
-          if (client.read() == 't') {
-            if (client.read() == 'e') {
-              if (client.read() == ':') {
-                client.read();
-                String theDate = client.readStringUntil('\r');
-                client.stop();
-                return theDate;
+    while(client.available()){
+      yield();
+      if (client.read() == '\n') {
+        if (client.read() == 'D') {
+          if (client.read() == 'a') {
+            if (client.read() == 't') {
+              if (client.read() == 'e') {
+                if (client.read() == ':') {
+                  client.read();
+                  String theDate = client.readStringUntil('\r');
+                  client.stop();
+                  return theDate;
+                }
               }
             }
           }
@@ -110,9 +115,10 @@ void initWifi() {
    // Try a few times and then timeout
    int tout = 0;
    while ((WiFi.status() != WL_CONNECTED)&&(tout<50)) {
-      delay(500);
-      Serial.print(".");
-      tout = tout +1;
+     yield();
+     delay(500);
+     Serial.print(".");
+     tout = tout +1;
    }
    if (WiFi.status() != WL_CONNECTED){
      Serial.println("WiFi not connected ... timed out");
@@ -125,6 +131,7 @@ void readDust(){
 	while (pms_port.peek()!=66){
 		receiveDat[0]=pms_port.read();
 		yield();
+    delay(5);
 	}
 	pms_port.readBytes((char *)receiveDat,receiveDatIndex);
 	checkSum = 0;
@@ -228,12 +235,13 @@ void setup() {
 	Serial.println(c_srv_addr);
 	Serial.println(c_public_key);
 	Serial.println(c_private_key);
+  curr_time = "2000-01-01 00:00:00";
 
   //Start Wifi and ThingSpeak
   initWifi();
   WiFiClient client;
-  curr_time = getTime();
-  //Phant phant(srv_addr, public_key, private_key);
+  curr_time = getTime(c_srv_addr);
+  Phant phant(srv_addr, public_key, private_key);
 }
 
 void loop() {
@@ -243,15 +251,21 @@ void loop() {
 	Serial.readBytes((char *)readbuffer,128);
   Serial.println("I'm about to read the dust sensor");
 	int nrecs = 0;
+  int i1;
+  for (i1=0;i1<receiveDatIndex;i1++){
+    receiveDat[i1]=0;
+  }
+  valid_data = (1 == 0);
 	while ((!valid_data)){
 		readDust();
+    yield();
 		delay(5);
 		nrecs = nrecs+1;
 	}
   sht30.get();
   Serial.println("I got data");
 	// Get time
-  curr_time = getTime();
+  curr_time = getTime(c_srv_addr);
   // Parse the PMS3003 message
 	FrameLength = (receiveDat[2]*256)+receiveDat[3];
 	PM1 = (receiveDat[4]*256)+receiveDat[5];
@@ -284,7 +298,9 @@ void loop() {
   myFile.print("\t");
   myFile.print(temperature);
   myFile.print("\t");
-  myFile.println(rh);
+  myFile.print(rh);
+  myFile.print("\t");
+  myFile.println(millis());
   myFile.close();
 
   //Create Phant object
@@ -307,6 +323,7 @@ void loop() {
   else {
     Serial.println("Can't connect to Phant server!");
   }
+
   // convert to microseconds
   toc = millis();
   unsigned long nap_time = (interval*1000) - (toc - tic);
