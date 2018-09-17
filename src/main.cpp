@@ -44,6 +44,7 @@ WEMOS_SHT3X
 // PMS3003 variables
 byte receiveDat[receiveDatIndex]; //receive data from the air detector module
 byte readbuffer[128]; //full serial port read buffer for clearing
+int nrecs; //to keep track of how many loops
 unsigned int checkSum,checkresult;
 unsigned int FrameLength,Data4,Data5,Data6;
 unsigned int PM1,PM25,PM10,PM1us,PM25us,PM10us;
@@ -73,14 +74,13 @@ char myWriteAPIKey[16];
 
 String getTime(char * timesrv) {
   WiFiClient client;
-  int tout = 0;
   if (!!!client.connect(timesrv, 80)) {
     yield();
-    Serial.println("connection failed, no time");
-    String theDate = "no valid time";
+    Serial.println(F("connection failed, no time"));
+    String theDate = F("no valid time");
     return theDate;
   } else {
-    client.print("HEAD / HTTP/1.1\r\n\r\n");
+    client.print(F("HEAD / HTTP/1.1\r\n\r\n"));
 
     while(!!!client.available()) {
       yield();
@@ -109,7 +109,7 @@ String getTime(char * timesrv) {
 }
 
 void initWifi() {
-   Serial.print("Connecting to ");
+   Serial.print(F("Connecting to "));
    Serial.print(ssid);
    WiFi.begin(c_ssid, c_passwd);
    // Try a few times and then timeout
@@ -121,9 +121,9 @@ void initWifi() {
      tout = tout +1;
    }
    if (WiFi.status() != WL_CONNECTED){
-     Serial.println("WiFi not connected ... timed out");
+     Serial.println(F("WiFi not connected ... timed out"));
    }
-  Serial.print("\nWiFi connected, IP address: ");
+  Serial.print(F("\nWiFi connected, IP address: "));
   Serial.println(WiFi.localIP());
 }
 
@@ -146,7 +146,7 @@ void setup() {
   Serial.begin(115200);
   pms_port.begin(9600);
   pms_port.setTimeout(20000);
-  Serial.println("I'm starting");
+  Serial.println(F("I'm starting"));
   //Read configuration file
 
   //Initialize the SD card and read configuration
@@ -225,6 +225,7 @@ void setup() {
 
   //Create folder for this serial number
   bool mkd = SD.mkdir(c_serialn);
+  Serial.println(mkd);
   sdCard = serialn;
 
 	// Echo the config file
@@ -242,6 +243,8 @@ void setup() {
   WiFiClient client;
   curr_time = getTime(c_srv_addr);
   Phant phant(srv_addr, public_key, private_key);
+  //Start a new run
+  nrecs = 0;
 }
 
 void loop() {
@@ -249,8 +252,8 @@ void loop() {
   //Read data
 	//Clear the serial receive buffer
 	Serial.readBytes((char *)readbuffer,128);
-  Serial.println("I'm about to read the dust sensor");
-	int nrecs = 0;
+  Serial.println(F("I'm about to read the dust sensor"));
+  nrecs = nrecs+1;
   int i1;
   for (i1=0;i1<receiveDatIndex;i1++){
     receiveDat[i1]=0;
@@ -260,10 +263,9 @@ void loop() {
 		readDust();
     yield();
 		delay(5);
-		nrecs = nrecs+1;
 	}
   sht30.get();
-  Serial.println("I got data");
+  Serial.println(F("I got data"));
 	// Get time
   curr_time = getTime(c_srv_addr);
   // Parse the PMS3003 message
@@ -284,7 +286,7 @@ void loop() {
 	fname.toCharArray(file_fname,fname.length()+1);
 	float temperature = sht30.cTemp;
 	float rh = sht30.humidity;
-  Serial.print("Temperature = ");
+  Serial.print(F("Temperature = "));
   Serial.println(temperature);
   //Write to SD card
   myFile = SD.open(file_fname, FILE_WRITE);
@@ -306,7 +308,7 @@ void loop() {
   //Create Phant object
   Phant phant(srv_addr, public_key, private_key);
   // Add measurements to phant object
-  Serial.println("Now to update fields");
+  Serial.println(F("Now to update fields"));
 
   phant.add("pm1", PM1);
   phant.add("pm25", PM25);
@@ -314,20 +316,23 @@ void loop() {
   phant.add("temperature",temperature);
   phant.add("rh",rh);
   // Write the fields that you've set all at once.
-  Serial.println("Now to upload");
+  Serial.println(F("Now to upload"));
   WiFiClient client;
   if (client.connect(c_srv_addr,8080)){
     client.print(phant.post());
     client.stop();
   }
   else {
-    Serial.println("Can't connect to Phant server!");
+    Serial.println(F("Can't connect to Phant server!"));
   }
 
-  // convert to microseconds
   toc = millis();
   unsigned long nap_time = (interval*1000) - (toc - tic);
-  Serial.print("Go to sleep for ");
+  Serial.print(F("Go to sleep for "));
   Serial.println(nap_time);
-  delay(nap_time);
+  if (nrecs > 60) {
+    setup();
+  } else {
+    delay(nap_time);
+  }
 }
